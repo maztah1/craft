@@ -35,10 +35,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Exclude markdown files except design.md
+# Exclude markdown files except design.md and README.md
 *.md
+!README.md
 !design.md
-!.kiro/specs/craft-platform/design.md
+!.craft/specs/craft-platform/design.md
 
 # Exclude spec files
 .craft/specs/craft-platform/requirements.md
