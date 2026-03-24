@@ -2,7 +2,7 @@
     "name": "@craft/config",
     "version": "0.1.0",
     "private": true,
-    "main": "index.js",
+    "main": "eslint-preset.js",
     "files": [
         "eslint-preset.js",
         "tsconfig.json"

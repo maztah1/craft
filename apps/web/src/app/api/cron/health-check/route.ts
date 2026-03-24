@@ -4,15 +4,9 @@ import { healthMonitorService } from '@/services/health-monitor.service';
 /**
  * Cron endpoint to check health of all deployments
  * This should be called periodically (e.g., every 5 minutes) by a cron service
- * 
+ *
  * Vercel Cron: https://vercel.com/docs/cron-jobs
- * Configure in vercel.json:
- * {
- *   "crons": [{
- *     "path": "/api/cron/health-check",
- *     "schedule": "*/5 * * * * "
-    *   }]
- * }
+ * Configure in vercel.json with crons array containing path and schedule.
  */
 export async function GET(req: NextRequest) {
     try {

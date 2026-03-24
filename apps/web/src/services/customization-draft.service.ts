@@ -125,8 +125,9 @@ export class CustomizationDraftService {
             .eq('id', deploymentId)
             .single();
 
-        if (error?.code === 'PGRST116' || !deployment) return null;
+        if (error?.code === 'PGRST116') return null;
         if (error) throw new Error(`Failed to load deployment: ${error.message}`);
+        if (!deployment) return null;
         if (deployment.user_id !== userId) throw new Error('Forbidden');
 
         return this.getDraft(userId, deployment.template_id);

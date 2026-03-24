@@ -1,26 +1,30 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useFormState, useFormStatus } from 'react-dom';
 import { signUpAction, type SignUpState } from './actions';
 
 const initialState: SignUpState = { status: 'idle', message: '' };
 
-export default function SignUpForm() {
-    const [state, formAction, isPending] = useActionState(signUpAction, initialState);
-
-    if (state.status === 'success') {
-        return (
-            <div role="status" className="text-center space-y-2">
-                <p className="text-green-600 font-medium">{state.message}</p>
-                <a href="/signin" className="text-sm text-blue-600 underline">
-                    Go to sign in
-                </a>
-            </div>
-        );
-    }
-
+function SubmitButton() {
+    const { pending } = useFormStatus();
     return (
-        <form action={formAction} noValidate className="space-y-4 w-full max-w-sm">
+        <button
+            type="submit"
+            disabled={pending}
+            aria-busy={pending}
+            className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white
+                       hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500
+                       disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+        >
+            {pending ? 'Creating account…' : 'Create account'}
+        </button>
+    );
+}
+
+function FormFields() {
+    const { pending } = useFormStatus();
+    return (
+        <>
             <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                     Email address
@@ -32,7 +36,7 @@ export default function SignUpForm() {
                     autoComplete="email"
                     required
                     aria-required="true"
-                    disabled={isPending}
+                    disabled={pending}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm
                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                                disabled:opacity-50"
@@ -52,7 +56,7 @@ export default function SignUpForm() {
                     required
                     aria-required="true"
                     minLength={8}
-                    disabled={isPending}
+                    disabled={pending}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm
                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                                disabled:opacity-50"
@@ -74,12 +78,33 @@ export default function SignUpForm() {
                     required
                     aria-required="true"
                     minLength={8}
-                    disabled={isPending}
+                    disabled={pending}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm
                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                                disabled:opacity-50"
                 />
             </div>
+        </>
+    );
+}
+
+export default function SignUpForm() {
+    const [state, formAction] = useFormState(signUpAction, initialState);
+
+    if (state.status === 'success') {
+        return (
+            <div role="status" className="text-center space-y-2">
+                <p className="text-green-600 font-medium">{state.message}</p>
+                <a href="/signin" className="text-sm text-blue-600 underline">
+                    Go to sign in
+                </a>
+            </div>
+        );
+    }
+
+    return (
+        <form action={formAction} noValidate className="space-y-4 w-full max-w-sm">
+            <FormFields />
 
             {state.status === 'error' && (
                 <p role="alert" className="text-sm text-red-600">
@@ -87,16 +112,7 @@ export default function SignUpForm() {
                 </p>
             )}
 
-            <button
-                type="submit"
-                disabled={isPending}
-                aria-busy={isPending}
-                className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white
-                           hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500
-                           disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-            >
-                {isPending ? 'Creating account…' : 'Create account'}
-            </button>
+            <SubmitButton />
 
             <p className="text-center text-sm text-gray-500">
                 Already have an account?{' '}
