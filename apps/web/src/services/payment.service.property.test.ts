@@ -36,7 +36,7 @@ vi.mock('@/lib/stripe/client', () => ({
         customers: { create: vi.fn() },
         checkout: { sessions: { create: vi.fn() } },
         subscriptions: {
-            retrieve: mockSubscriptionsRetrieve,
+            retrieve: (...args: any[]) => mockSubscriptionsRetrieve(...args),
             update: vi.fn(),
         },
     },

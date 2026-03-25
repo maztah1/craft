@@ -19,6 +19,7 @@ import {
     validateNetworkSelection,
     coerceNetworkId,
     stellarNetworkService,
+    StellarNetworkService,
     type StellarNetworkId,
 } from './stellar-network.service';
 
@@ -269,7 +270,7 @@ describe('Network Selection Validation — Property 051', () => {
         it('module functions and service methods produce identical results', () => {
             fc.assert(
                 fc.property(arbSupportedNetwork, (network) => {
-                    const service = new (require('./stellar-network.service')).StellarNetworkService();
+                    const service = new StellarNetworkService();
 
                     // Invariant: service methods match module functions
                     expect(service.getSupportedNetworks()).toEqual(getSupportedNetworks());
@@ -284,7 +285,7 @@ describe('Network Selection Validation — Property 051', () => {
         it('singleton and new instances behave identically', () => {
             fc.assert(
                 fc.property(arbSupportedNetwork, (network) => {
-                    const service = new (require('./stellar-network.service')).StellarNetworkService();
+                    const service = new StellarNetworkService();
 
                     // Invariant: singleton produces same results as new instance
                     expect(stellarNetworkService.validate(network)).toEqual(service.validate(network));

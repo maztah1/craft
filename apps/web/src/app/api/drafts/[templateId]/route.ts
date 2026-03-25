@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/lib/api/with-auth';
 import { customizationDraftService } from '@/services/customization-draft.service';
 import { validateCustomizationConfig, customizationConfigSchema } from '@/lib/customization/validate';
+import type { CustomizationConfig } from '@craft/types';
 
 type Params = { templateId: string };
 
@@ -40,7 +41,7 @@ export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) 
     }
 
     // Schema parse is safe here — validateCustomizationConfig already confirmed shape
-    const config = customizationConfigSchema.parse(body);
+    const config = customizationConfigSchema.parse(body) as CustomizationConfig;
 
     try {
         const draft = await customizationDraftService.saveDraft(user.id, params.templateId, config);

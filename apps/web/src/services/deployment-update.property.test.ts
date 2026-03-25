@@ -75,8 +75,8 @@ interface DeploymentState {
 const arbBrandingConfig = fc.record({
     appName: fc.string({ minLength: 1, maxLength: 50 }),
     logoUrl: fc.option(fc.webUrl()).map((url) => url ?? undefined),
-    primaryColor: fc.hexaString().map((hex) => `#${hex}`).filter((s) => s.length === 7),
-    secondaryColor: fc.hexaString().map((hex) => `#${hex}`).filter((s) => s.length === 7),
+    primaryColor: fc.stringMatching(/^[0-9a-fA-F]{6}$/).map((hex) => `#${hex}`),
+    secondaryColor: fc.stringMatching(/^[0-9a-fA-F]{6}$/).map((hex) => `#${hex}`),
     fontFamily: fc.constantFrom('Inter', 'Roboto', 'Open Sans', 'Lato'),
 });
 

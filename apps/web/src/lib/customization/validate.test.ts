@@ -130,7 +130,7 @@ describe('validateCustomizationConfig', () => {
                 ...valid.stellar,
                 contractAddresses: {
                     usdcContract: 'CBQWI64FZ2NKSJC7D45HJZVVMQZ3T7KHXOJSLZPZ5LHKQM7FFWVGNQST',
-                    nativeTokenContract: 'CATPNZ2SJRSVZJBWXGFSMZQHQ47JM5PXNQRVJLGHGHVKPZ2OVH3FHXP',
+                    nativeTokenContract: 'CATPNZ2SJRSVZJBWXGFSMZQHQ47JM5PXNQRVJLGHGHVKPZ2OVH3FHXPA',
                 },
             },
         });

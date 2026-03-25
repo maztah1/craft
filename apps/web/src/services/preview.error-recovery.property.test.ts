@@ -39,8 +39,8 @@ import {
 /** Generates a pair of distinct 6-digit hex colors as [primary, secondary]. */
 const arbHexColorPair = fc
   .tuple(
-    fc.hexaString({ minLength: 6, maxLength: 6 }),
-    fc.hexaString({ minLength: 6, maxLength: 6 })
+    fc.stringMatching(/^[0-9a-fA-F]{6}$/),
+    fc.stringMatching(/^[0-9a-fA-F]{6}$/)
   )
   .filter(([a, b]) => a.toLowerCase() !== b.toLowerCase())
   .map(([a, b]) => [`#${a}`, `#${b}`] as [string, string]);

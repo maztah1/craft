@@ -40,8 +40,8 @@ const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 const arbHexColor = fc
   .tuple(
-    fc.hexaString({ minLength: 3, maxLength: 3 }),
-    fc.hexaString({ minLength: 3, maxLength: 3 })
+    fc.stringMatching(/^[0-9a-fA-F]{3}$/),
+    fc.stringMatching(/^[0-9a-fA-F]{3}$/)
   )
   // Ensure primary !== secondary to satisfy DUPLICATE_COLORS business rule
   .filter(([a, b]) => a.toLowerCase() !== b.toLowerCase())

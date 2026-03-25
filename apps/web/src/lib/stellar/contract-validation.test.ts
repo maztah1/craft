@@ -9,12 +9,12 @@ import {
 // ── Valid Contract Addresses ─────────────────────────────────────────────────
 
 const VALID_TESTNET_CONTRACTS = {
-    usdcContract: 'CBQWI64FZ2NKSJC7D45HJZVVMQZ3T7KHXOJSLZPZ5LHKQM7FFWVGNQST',
-    nativeTokenContract: 'CATPNZ2SJRSVZJBWXGFSMZQHQ47JM5PXNQRVJLGHGHVKPZ2OVH3FHXP',
+    usdcContract: 'CBQWI64FZ2NKSJC7D45HJZVVMQZ3T7KHXOJSLZPZ5LHKQM7FFWVGNQST', // 56 chars
+    nativeTokenContract: 'CATPNZ2SJRSVZJBWXGFSMZQHQ47JM5PXNQRVJLGHGHVKPZ2OVH3FHPAA', // 56 chars
 };
 
 const VALID_MAINNET_CONTRACTS = {
-    someContract: 'CATHQD7JDJFQ4WVQXVJDAJX4CSJM3XDYPRMHMV35FVPVLCZDWJYC5WD',
+    someContract: 'CATHQD7JDJFQ4WVQXVJDAJX4CSJM3XDYPRMHMV35FVPVLCZDWJYC5WDA', // 56 chars
 };
 
 // ── Invalid Contract Addresses ───────────────────────────────────────────────
@@ -33,11 +33,14 @@ const INVALID_CONTRACTS = {
 const validChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
 const arbValidContractAddress = fc
-    .string({ minLength: 55, maxLength: 55, characters: fc.constantFrom(...validChars.split('')) })
-    .map((chars) => `C${chars}`);
+    .tuple(
+        fc.constant('C'),
+        fc.array(fc.constantFrom(...validChars.split('')), { minLength: 55, maxLength: 55 })
+    )
+    .map(([prefix, chars]) => prefix + chars.join('').slice(0, 55));
 
 // Contract names
-const arbContractName = fc.regex(/^[a-zA-Z][a-zA-Z0-9]*$/);
+const arbContractName = fc.stringMatching(/^[a-zA-Z][a-zA-Z0-9]*$/);
 
 // ── Unit Tests: validateContractAddress ──────────────────────────────────────
 

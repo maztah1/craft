@@ -42,7 +42,7 @@ const NETWORKS = ['mainnet', 'testnet'] as const;
 
 /** Hex color string e.g. #a1b2c3 */
 const arbHexColor = fc
-    .hexaString({ minLength: 6, maxLength: 6 })
+    .stringMatching(/^[0-9a-fA-F]{6}$/)
     .map((h) => `#${h}`);
 
 /** Safe printable string — avoids control chars that would break generated TS */

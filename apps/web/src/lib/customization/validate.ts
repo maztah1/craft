@@ -49,6 +49,15 @@ function businessRuleErrors(config: CustomizationConfig): ValidationError[] {
     const errors: ValidationError[] = [];
     const { network, horizonUrl, contractAddresses } = config.stellar;
 
+    if (network !== 'mainnet' && network !== 'testnet') {
+        errors.push({
+            field: 'stellar.network',
+            message: 'Network must be either mainnet or testnet',
+            code: 'UNSUPPORTED_NETWORK',
+        });
+        return errors;
+    }
+
     if (network === 'mainnet' && horizonUrl === TESTNET_HORIZON) {
         errors.push({
             field: 'stellar.horizonUrl',

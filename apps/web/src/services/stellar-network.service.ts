@@ -100,7 +100,7 @@ export function isNetworkSupported(network: unknown): network is StellarNetworkI
     if (typeof network !== 'string') {
         return false;
     }
-    return network in NETWORK_REGISTRY;
+    return Object.prototype.hasOwnProperty.call(NETWORK_REGISTRY, network);
 }
 
 /**

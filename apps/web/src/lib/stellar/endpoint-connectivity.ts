@@ -55,7 +55,10 @@ export async function checkHorizonEndpoint(
 
     // Validate URL format first
     try {
-        new URL(horizonUrl);
+        const parsed = new URL(horizonUrl);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            throw new Error('Unsupported protocol');
+        }
     } catch {
         return {
             reachable: false,
@@ -173,7 +176,10 @@ export async function checkSorobanRpcEndpoint(
 
     // Validate URL format first
     try {
-        new URL(sorobanRpcUrl);
+        const parsed = new URL(sorobanRpcUrl);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            throw new Error('Unsupported protocol');
+        }
     } catch {
         return {
             reachable: false,
@@ -294,13 +300,17 @@ export async function checkStellarEndpoints(
     sorobanRpcUrl?: string,
     options: HorizonCheckOptions = {}
 ): Promise<ConnectivityCheckResult[]> {
-    const checks: Promise<ConnectivityCheckResult>[] = [
-        checkHorizonEndpoint(horizonUrl, options),
-    ];
+    const horizonResult = await checkHorizonEndpoint(horizonUrl, options);
+    const results: ConnectivityCheckResult[] = [horizonResult];
 
-    if (sorobanRpcUrl) {
-        checks.push(checkSorobanRpcEndpoint(sorobanRpcUrl, options));
+    // If Horizon URL itself is invalid, do not proceed with optional checks.
+    if (horizonResult.errorType === 'VALIDATION') {
+        return results;
     }
 
-    return Promise.all(checks);
+    if (sorobanRpcUrl) {
+        results.push(await checkSorobanRpcEndpoint(sorobanRpcUrl, options));
+    }
+
+    return results;
 }

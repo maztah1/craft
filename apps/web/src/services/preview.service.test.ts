@@ -68,6 +68,22 @@ const validConfig: CustomizationConfig = {
     },
 };
 
+const mainnetConfig: CustomizationConfig = {
+    ...validConfig,
+    stellar: {
+        network: 'mainnet',
+        horizonUrl: 'https://horizon.stellar.org',
+    },
+};
+
+const testnetConfig: CustomizationConfig = {
+    ...validConfig,
+    stellar: {
+        network: 'testnet',
+        horizonUrl: 'https://horizon-testnet.stellar.org',
+    },
+};
+
 // ── buildDefaultConfigFromTemplate ────────────────────────────────────────────
 
 describe('buildDefaultConfigFromTemplate', () => {

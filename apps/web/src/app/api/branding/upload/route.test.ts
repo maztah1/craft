@@ -1,4 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Polyfill File.prototype.arrayBuffer for test environment
+if (typeof File !== 'undefined' && !File.prototype.arrayBuffer) {
+    File.prototype.arrayBuffer = function () {
+        return Promise.resolve(Uint8Array.from(this).buffer);
+    };
+}
 import { NextRequest } from 'next/server';
 
 const mockGetUser = vi.fn();
@@ -11,14 +18,14 @@ const fakeUser = { id: 'user-1', email: 'a@b.com' };
 const PNG_MAGIC = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 function makeMultipartRequest(file: File | null) {
-    if (!file) {
-        // Send form without a file field
-        const form = new FormData();
-        return new NextRequest('http://localhost/api/branding/upload', { method: 'POST', body: form });
-    }
     const form = new FormData();
-    form.append('file', file);
-    return new NextRequest('http://localhost/api/branding/upload', { method: 'POST', body: form });
+    if (file) {
+        form.append('file', file);
+    }
+
+    const req = new NextRequest('http://localhost/api/branding/upload', { method: 'POST' });
+    (req as any).formData = async () => form;
+    return req;
 }
 
 describe('POST /api/branding/upload', () => {
