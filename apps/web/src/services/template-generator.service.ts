@@ -9,6 +9,7 @@
  *
  * Feature: template-generator-entrypoint
  * Issue branch: issue-061-implement-template-generator-entrypoint
+ * Updated: issue-062-implement-template-cloning-logic
  */
 
 import { validateCustomizationConfig } from '@/lib/customization/validate';
@@ -18,6 +19,11 @@ import {
   TemplateFamilyId,
   codeGeneratorService,
 } from './code-generator.service';
+import {
+  TemplateCloningService,
+  templateCloningService,
+  type CloneRequest,
+} from './template-cloning.service';
 import type { TemplateCategory } from '@craft/types';
 
 // ── Re-exports from @craft/types ──────────────────────────────────────────────
@@ -77,7 +83,8 @@ export function mapCategoryToFamily(category: TemplateCategory): TemplateFamilyI
 export class TemplateGeneratorService {
   constructor(
     private readonly _templateService: Pick<TemplateService, 'getTemplate'> = templateService,
-    private readonly _codeGeneratorService: Pick<CodeGeneratorService, 'generate'> = codeGeneratorService
+    private readonly _codeGeneratorService: Pick<CodeGeneratorService, 'generate'> = codeGeneratorService,
+    private readonly _cloningService: Pick<TemplateCloningService, 'clone'> = templateCloningService
   ) {}
 
   /**
@@ -176,11 +183,34 @@ export class TemplateGeneratorService {
         };
       }
 
-      // ── Step 5: Generate code ────────────────────────────────────────────────
+      // ── Step 5: Clone template into workspace ────────────────────────────────
+      const runId = crypto.randomUUID();
+      const cloneRequest: CloneRequest = {
+        source: { type: 'local', path: template.baseRepositoryUrl },
+        workspaceRoot: outputPath || '/tmp/craft-workspaces',
+        runId,
+      };
+
+      const cloneResult = await this._cloningService.clone(cloneRequest);
+      if (!cloneResult.success) {
+        return {
+          success: false,
+          generatedFiles: [],
+          errors: cloneResult.errors.map((e) => ({
+            file: e.path,
+            message: e.message,
+            severity: 'error' as const,
+          })),
+        };
+      }
+
+      const workspacePath = cloneResult.workspacePath ?? outputPath;
+
+      // ── Step 6: Generate code ────────────────────────────────────────────────
       const innerResult = this._codeGeneratorService.generate({
         templateId,
         customization,
-        outputPath,
+        outputPath: workspacePath,
         templateFamily,
       });
 
@@ -192,13 +222,13 @@ export class TemplateGeneratorService {
         };
       }
 
-      // ── Step 6: Assemble artifact metadata ───────────────────────────────────
+      // ── Step 7: Assemble artifact metadata ───────────────────────────────────
       const artifactMetadata: ArtifactMetadata = {
         templateId,
         templateFamily,
         generatedAt: new Date().toISOString(),
         fileCount: innerResult.generatedFiles.length,
-        outputPath,
+        outputPath: workspacePath,
       };
 
       return {

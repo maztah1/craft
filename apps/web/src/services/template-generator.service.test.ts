@@ -3,6 +3,7 @@
  *
  * Feature: template-generator-entrypoint
  * Issue branch: issue-061-implement-template-generator-entrypoint
+ * Updated: issue-062-implement-template-cloning-logic (cloning integration)
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -61,7 +62,8 @@ const mockGeneratedFiles: GeneratedFile[] = [
 
 function makeService(
   templateMock?: Partial<{ getTemplate: () => Promise<Template> }>,
-  codeGenMock?: Partial<{ generate: () => any }>
+  codeGenMock?: Partial<{ generate: () => any }>,
+  cloningMock?: Partial<{ clone: () => Promise<any> }>
 ) {
   const ts = {
     getTemplate: vi.fn().mockResolvedValue(mockTemplate),
@@ -75,7 +77,15 @@ function makeService(
     }),
     ...codeGenMock,
   };
-  return new TemplateGeneratorService(ts as any, cgs as any);
+  const cs = {
+    clone: vi.fn().mockResolvedValue({
+      success: true,
+      workspacePath: '/tmp/output',
+      errors: [],
+    }),
+    ...cloningMock,
+  };
+  return new TemplateGeneratorService(ts as any, cgs as any, cs as any);
 }
 
 // ── mapCategoryToFamily ───────────────────────────────────────────────────────
@@ -274,5 +284,80 @@ describe('TemplateGeneratorService.generate — happy path', () => {
         expect.objectContaining({ templateFamily: expectedFamily })
       );
     }
+  });
+});
+
+// ── TemplateCloningService integration ───────────────────────────────────────
+
+describe('TemplateGeneratorService — cloning integration', () => {
+  it('calls cloningService.clone before codeGeneratorService.generate', async () => {
+    const callOrder: string[] = [];
+    const cloneMock = vi.fn().mockImplementation(async () => {
+      callOrder.push('clone');
+      return { success: true, workspacePath: '/tmp/ws/run-1', errors: [] };
+    });
+    const generateMock = vi.fn().mockImplementation(() => {
+      callOrder.push('generate');
+      return { success: true, generatedFiles: mockGeneratedFiles, errors: [] };
+    });
+    const svc = makeService(undefined, { generate: generateMock }, { clone: cloneMock });
+    await svc.generate(validRequest);
+
+    expect(cloneMock).toHaveBeenCalled();
+    expect(generateMock).toHaveBeenCalled();
+    expect(callOrder).toEqual(['clone', 'generate']);
+  });
+
+  it('passes workspacePath from clone result as outputPath to codeGeneratorService', async () => {
+    const workspacePath = '/tmp/ws/run-abc';
+    const generateMock = vi.fn().mockReturnValue({
+      success: true,
+      generatedFiles: mockGeneratedFiles,
+      errors: [],
+    });
+    const svc = makeService(
+      undefined,
+      { generate: generateMock },
+      { clone: vi.fn().mockResolvedValue({ success: true, workspacePath, errors: [] }) }
+    );
+    await svc.generate(validRequest);
+
+    expect(generateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ outputPath: workspacePath })
+    );
+  });
+
+  it('returns success:false and propagates CloneError messages when clone fails', async () => {
+    const svc = makeService(
+      undefined,
+      undefined,
+      {
+        clone: vi.fn().mockResolvedValue({
+          success: false,
+          errors: [{ path: 'runId', message: 'runId is invalid', severity: 'error' }],
+        }),
+      }
+    );
+    const result = await svc.generate(validRequest);
+
+    expect(result.success).toBe(false);
+    expect(result.errors.some((e) => e.message.includes('runId is invalid'))).toBe(true);
+    expect(result.artifactMetadata).toBeUndefined();
+  });
+
+  it('does not call codeGeneratorService when clone fails', async () => {
+    const generateMock = vi.fn();
+    const svc = makeService(
+      undefined,
+      { generate: generateMock },
+      {
+        clone: vi.fn().mockResolvedValue({
+          success: false,
+          errors: [{ path: 'source', message: 'path traversal', severity: 'error' }],
+        }),
+      }
+    );
+    await svc.generate(validRequest);
+    expect(generateMock).not.toHaveBeenCalled();
   });
 });
