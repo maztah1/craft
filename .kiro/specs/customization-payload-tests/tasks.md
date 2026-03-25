@@ -6,7 +6,7 @@ Add service-layer unit tests and property-based tests for `CustomizationDraftSer
 
 ## Tasks
 
-- [ ] 1. Extend `apps/web/src/services/customization-draft.service.test.ts` with service-layer unit tests
+- [-] 1. Extend `apps/web/src/services/customization-draft.service.test.ts` with service-layer unit tests
   - Add Supabase mock chain setup (`mockSingle`, `mockSelect`, `mockEq`, `mockUpsert`, `mockFrom`) at the top of the file using `vi.mock('@/lib/supabase/server', ...)`
   - Import `CustomizationDraftService` alongside the existing `normalizeDraftConfig` import
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 2.5_
