@@ -8,10 +8,12 @@
  *   VERCEL_TEAM_ID   — Optional. When set, all projects are scoped to this team.
  *
  * Responsibilities:
+ *   - Validate required configuration at construction time via validateConfig()
  *   - Create a Vercel project linked to a GitHub repository
  *   - Configure environment variables on the project
- *   - Trigger a deployment and poll/return the deployment URL
- *   - Surface rate-limit and auth errors with structured codes
+ *   - Trigger a deployment and return the deployment URL
+ *   - Surface rate-limit and auth errors with structured codes via a single
+ *     shared request() helper (no duplicated fetch/error-handling logic)
  *
  * Design doc properties satisfied:
  *   Property 20 — Deployment Pipeline Sequence
@@ -21,6 +23,8 @@
  */
 
 import type { VercelEnvVar } from '@/lib/env/env-template-generator';
+
+export type { VercelEnvVar };
 
 const VERCEL_API_BASE = 'https://api.vercel.com';
 
@@ -76,9 +80,34 @@ export interface TriggerDeploymentResult {
     status: string;
 }
 
+// ── Config validation ─────────────────────────────────────────────────────────
+
+export interface VercelConfigValidationResult {
+    valid: boolean;
+    /** Present when valid is false. */
+    missing?: 'VERCEL_TOKEN';
+}
+
+/**
+ * Validates that all required Vercel environment variables are present.
+ * Call this at application startup or before the first deployment operation.
+ */
+export function validateVercelConfig(): VercelConfigValidationResult {
+    if (!process.env.VERCEL_TOKEN) {
+        return { valid: false, missing: 'VERCEL_TOKEN' };
+    }
+    return { valid: true };
+}
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
+interface FetchLike {
+    (input: string, init?: RequestInit): Promise<Response>;
+}
+
 export class VercelService {
+    constructor(private readonly _fetch: FetchLike = fetch) {}
+
     private get token(): string {
         return process.env.VERCEL_TOKEN ?? '';
     }
@@ -104,34 +133,22 @@ export class VercelService {
     }
 
     /**
-     * Create a Vercel project linked to a GitHub repository and configure
-     * environment variables. Returns the created project record.
+     * Shared request helper — all Vercel API calls go through here.
+     * Handles network errors, status-to-error-code mapping, and JSON parsing.
      */
-    async createProject(request: CreateVercelProjectRequest): Promise<VercelProject> {
-        const headers = this.buildHeaders();
-
-        const payload: Record<string, unknown> = {
-            name: request.name,
-            framework: request.framework ?? 'nextjs',
-            gitRepository: {
-                type: 'github',
-                repo: request.gitRepo,
-            },
-        };
-
-        if (request.buildCommand) {
-            payload.buildCommand = request.buildCommand;
-        }
-        if (request.outputDirectory) {
-            payload.outputDirectory = request.outputDirectory;
-        }
+    private async request<T = Record<string, unknown>>(
+        path: string,
+        init: RequestInit,
+        /** Optional status code that should be treated as a specific error before assertOk. */
+        earlyThrow?: { status: number; code: VercelErrorCode; message: string },
+    ): Promise<T> {
+        const headers = this.buildHeaders(); // throws AUTH_FAILED if token missing
 
         let res: Response;
         try {
-            res = await fetch(this.url('/v9/projects'), {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(payload),
+            res = await this._fetch(this.url(path), {
+                ...init,
+                headers: { ...headers, ...(init.headers ?? {}) },
             });
         } catch (err: unknown) {
             throw new VercelApiError(
@@ -142,14 +159,35 @@ export class VercelService {
 
         const data = await res.json().catch(() => ({})) as Record<string, unknown>;
 
-        if (res.status === 409) {
-            throw new VercelApiError(
-                `Vercel project "${request.name}" already exists`,
-                'PROJECT_EXISTS',
-            );
+        if (earlyThrow && res.status === earlyThrow.status) {
+            throw new VercelApiError(earlyThrow.message, earlyThrow.code);
         }
 
         this.assertOk(res, data);
+        return data as T;
+    }
+
+    /**
+     * Create a Vercel project linked to a GitHub repository and configure
+     * environment variables. Returns the created project record.
+     */
+    async createProject(request: CreateVercelProjectRequest): Promise<VercelProject> {
+        const payload: Record<string, unknown> = {
+            name: request.name,
+            framework: request.framework ?? 'nextjs',
+            gitRepository: { type: 'github', repo: request.gitRepo },
+        };
+        if (request.buildCommand) payload.buildCommand = request.buildCommand;
+        if (request.outputDirectory) payload.outputDirectory = request.outputDirectory;
+
+        const data = await this.request('/v9/projects', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        }, {
+            status: 409,
+            code: 'PROJECT_EXISTS',
+            message: `Vercel project "${request.name}" already exists`,
+        });
 
         const project: VercelProject = {
             id: data.id as string,
@@ -157,9 +195,11 @@ export class VercelService {
             url: `${data.name as string}.vercel.app`,
         };
 
-        // Configure environment variables if provided
         if (request.envVars.length > 0) {
-            await this.setEnvVars(project.id, request.envVars);
+            await this.request(`/v9/projects/${project.id}/env`, {
+                method: 'POST',
+                body: JSON.stringify(request.envVars),
+            });
         }
 
         return project;
@@ -170,45 +210,20 @@ export class VercelService {
      * Returns the deployment ID and URL immediately — the build runs async.
      */
     async triggerDeployment(projectId: string, gitRepo: string): Promise<TriggerDeploymentResult> {
-        const headers = this.buildHeaders();
-
-        // Derive owner/repo parts
         const [owner, repo] = gitRepo.split('/');
 
-        let res: Response;
-        try {
-            res = await fetch(this.url('/v13/deployments'), {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                    name: repo,
-                    gitSource: {
-                        type: 'github',
-                        org: owner,
-                        repo,
-                        ref: 'main',
-                    },
-                    projectSettings: {
-                        framework: 'nextjs',
-                    },
-                }),
-            });
-        } catch (err: unknown) {
-            throw new VercelApiError(
-                err instanceof Error ? err.message : 'Network request failed',
-                'NETWORK_ERROR',
-            );
-        }
-
-        const data = await res.json().catch(() => ({})) as Record<string, unknown>;
-        this.assertOk(res, data);
-
-        const deploymentId = data.id as string;
-        const deploymentUrl = `https://${data.url as string}`;
+        const data = await this.request('/v13/deployments', {
+            method: 'POST',
+            body: JSON.stringify({
+                name: repo,
+                gitSource: { type: 'github', org: owner, repo, ref: 'main' },
+                projectSettings: { framework: 'nextjs' },
+            }),
+        });
 
         return {
-            deploymentId,
-            deploymentUrl,
+            deploymentId: data.id as string,
+            deploymentUrl: `https://${data.url as string}`,
             status: (data.status as string) ?? 'QUEUED',
         };
     }
@@ -218,7 +233,7 @@ export class VercelService {
      */
     async validateAccess(): Promise<boolean> {
         try {
-            const res = await fetch(this.url('/v2/user'), {
+            const res = await this._fetch(this.url('/v2/user'), {
                 headers: this.buildHeaders(),
             });
             return res.ok;
@@ -228,27 +243,6 @@ export class VercelService {
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
-
-    private async setEnvVars(projectId: string, envVars: VercelEnvVar[]): Promise<void> {
-        const headers = this.buildHeaders();
-
-        let res: Response;
-        try {
-            res = await fetch(this.url(`/v9/projects/${projectId}/env`), {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(envVars),
-            });
-        } catch (err: unknown) {
-            throw new VercelApiError(
-                err instanceof Error ? err.message : 'Failed to set env vars',
-                'NETWORK_ERROR',
-            );
-        }
-
-        const data = await res.json().catch(() => ({})) as Record<string, unknown>;
-        this.assertOk(res, data);
-    }
 
     private assertOk(res: Response, data: Record<string, unknown>): void {
         if (res.ok) return;
@@ -270,4 +264,3 @@ export class VercelService {
     }
 }
 
-export const vercelService = new VercelService();
