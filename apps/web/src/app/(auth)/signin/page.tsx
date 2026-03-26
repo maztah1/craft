@@ -1,23 +1,23 @@
 import type { Metadata } from 'next';
-import SignUpForm from './SignUpForm';
+import SignInForm from './SignInForm';
 
 export const metadata: Metadata = {
-    title: 'Create account – CRAFT',
-    description: 'Sign up for CRAFT and start deploying DeFi apps on Stellar.',
+    title: 'Sign in – CRAFT',
+    description: 'Sign in to your CRAFT account to manage your Stellar DeFi deployments.',
 };
 
-export default function SignUpPage() {
+export default function SignInPage() {
     return (
         <div className="space-y-6">
             <div className="text-center">
                 <h1 className="text-2xl font-bold font-headline text-on-surface">
-                    Create your account
+                    Welcome back
                 </h1>
                 <p className="mt-1 text-sm text-on-surface-variant">
-                    Deploy DeFi apps on Stellar in minutes.
+                    Sign in to continue to CRAFT.
                 </p>
             </div>
-            <SignUpForm />
+            <SignInForm />
         </div>
     );
 }

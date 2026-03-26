@@ -209,6 +209,23 @@ export class AuthService {
     }
 
     /**
+     * Send a password-reset email via Supabase.
+     * Supabase handles the token generation and email delivery.
+     */
+    async resetPassword(email: string): Promise<void> {
+        const supabase = createClient();
+        const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/auth/callback?next=/app/settings`;
+
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo,
+        });
+
+        if (error) {
+            throw new Error(error.message);
+        }
+    }
+
+    /**
      * Convert technical error messages to user-friendly ones
      */
     private getReadableErrorMessage(message: string): string {

@@ -3,19 +3,21 @@
 import { useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import Link from 'next/link';
-import { signUpAction, type SignUpState } from './actions';
+import { signInAction, type SignInState } from './actions';
 
-const initialState: SignUpState = { status: 'idle', message: '' };
+const initialState: SignInState = { status: 'idle', message: '' };
 
 /**
  * --------------------------------------------------------------------------
  * Error Copy & Edge Cases
  * --------------------------------------------------------------------------
- * - Passwords do not match        → "Passwords do not match."
- * - Email already exists (409)    → "An account with this email already exists."
+ * - Invalid credentials (401)     → "Invalid email or password. Please try again."
+ * - User not found                → "No account found with this email."
+ * - Email not confirmed           → "Please confirm your email address before signing in."
  * - Network failure               → "Network error. Please try again."
+ * - Rate limited (429)            → "Too many sign-in attempts. Please wait a few minutes."
  * - Generic API error             → message from API or "Something went wrong. Please try again."
- * - Success                       → "Account created! Check your email to confirm."
+ * - Success                       → redirect to /app (handled in server action)
  * --------------------------------------------------------------------------
  */
 
@@ -37,43 +39,36 @@ function SubmitButton() {
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
             )}
-            {pending ? 'Creating account…' : 'Create account'}
+            {pending ? 'Signing in…' : 'Sign in'}
         </button>
     );
 }
 
-function PasswordInput({
-    id,
-    name,
-    label,
-    hint,
-    autoComplete,
-    disabled,
-}: {
-    id: string;
-    name: string;
-    label: string;
-    hint?: string;
-    autoComplete: string;
-    disabled: boolean;
-}) {
+function PasswordInput({ disabled }: { disabled: boolean }) {
     const [visible, setVisible] = useState(false);
 
     return (
         <div>
-            <label htmlFor={id} className="block text-sm font-medium text-on-surface mb-1">
-                {label}
-                {hint && <span className="ml-1 text-xs text-on-surface-variant font-normal">{hint}</span>}
-            </label>
+            <div className="flex items-center justify-between mb-1">
+                <label htmlFor="password" className="block text-sm font-medium text-on-surface">
+                    Password
+                </label>
+                <Link
+                    href="/forgot-password"
+                    className="text-xs font-medium text-surface-tint hover:underline focus:outline-none focus:ring-2 focus:ring-surface-tint rounded"
+                    tabIndex={0}
+                >
+                    Forgot password?
+                </Link>
+            </div>
             <div className="relative">
                 <input
-                    id={id}
-                    name={name}
+                    id="password"
+                    name="password"
                     type={visible ? 'text' : 'password'}
-                    autoComplete={autoComplete}
+                    autoComplete="current-password"
                     required
                     aria-required="true"
-                    minLength={8}
                     disabled={disabled}
                     className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest
                                px-3 py-2 pr-10 text-sm text-on-surface shadow-sm
@@ -105,10 +100,12 @@ function PasswordInput({
     );
 }
 
-function FormFields() {
-    const { pending } = useFormStatus();
+export default function SignInForm() {
+    const [state, formAction] = useFormState(signInAction, initialState);
+    const { pending } = { pending: false }; // For field-level usage outside FormStatus context
+
     return (
-        <>
+        <form action={formAction} noValidate className="space-y-4">
             <div>
                 <label htmlFor="email" className="block text-sm font-medium text-on-surface mb-1">
                     Email address
@@ -120,7 +117,6 @@ function FormFields() {
                     autoComplete="email"
                     required
                     aria-required="true"
-                    disabled={pending}
                     placeholder="you@company.com"
                     className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest
                                px-3 py-2 text-sm text-on-surface shadow-sm
@@ -130,51 +126,7 @@ function FormFields() {
                 />
             </div>
 
-            <PasswordInput
-                id="password"
-                name="password"
-                label="Password"
-                hint="(min. 8 characters)"
-                autoComplete="new-password"
-                disabled={pending}
-            />
-
-            <PasswordInput
-                id="confirmPassword"
-                name="confirmPassword"
-                label="Confirm password"
-                autoComplete="new-password"
-                disabled={pending}
-            />
-        </>
-    );
-}
-
-export default function SignUpForm() {
-    const [state, formAction] = useFormState(signUpAction, initialState);
-
-    if (state.status === 'success') {
-        return (
-            <div role="status" className="text-center space-y-3 py-4">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-                    <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                </div>
-                <p className="text-green-700 font-medium text-sm">{state.message}</p>
-                <Link
-                    href="/signin"
-                    className="inline-block text-sm font-medium text-surface-tint hover:underline focus:outline-none focus:ring-2 focus:ring-surface-tint rounded"
-                >
-                    Go to sign in →
-                </Link>
-            </div>
-        );
-    }
-
-    return (
-        <form action={formAction} noValidate className="space-y-4">
-            <FormFields />
+            <PasswordInput disabled={false} />
 
             {state.status === 'error' && (
                 <div role="alert" className="rounded-lg bg-error-container/50 border border-error/20 px-3 py-2">
@@ -185,12 +137,12 @@ export default function SignUpForm() {
             <SubmitButton />
 
             <p className="text-center text-sm text-on-surface-variant">
-                Already have an account?{' '}
+                Don&apos;t have an account?{' '}
                 <Link
-                    href="/signin"
+                    href="/signup"
                     className="font-medium text-surface-tint hover:underline focus:outline-none focus:ring-2 focus:ring-surface-tint rounded"
                 >
-                    Sign in
+                    Sign up
                 </Link>
             </p>
         </form>

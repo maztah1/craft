@@ -35,6 +35,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withDeploymentAuth } from '@/lib/api/with-auth';
 import { githubService } from '@/services/github.service';
+import { githubRepositoryUpdateService } from '@/services/github-repository-update.service';
 
 interface RequestBody {
     private?: boolean;
@@ -174,6 +175,113 @@ export const POST = withDeploymentAuth(async (req: NextRequest, { params, supaba
 
         return NextResponse.json(
             { error: svcErr.message ?? 'Repository creation failed' },
+            { status: 500 },
+        );
+    }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/deployments/[id]/repository
+//
+// Updates the GitHub repository for an existing deployment by regenerating
+// files from the new customization config and committing them.
+//
+// Feature: github-repository-update-flow
+// ---------------------------------------------------------------------------
+
+interface UpdateRequestBody {
+    customizationConfig: Record<string, unknown>;
+    branch?: string;
+    commitMessage?: string;
+}
+
+function normalizeUpdateRequestBody(raw: unknown): UpdateRequestBody | null {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+        return null;
+    }
+
+    const body = raw as Record<string, unknown>;
+
+    if (
+        !('customizationConfig' in body) ||
+        body.customizationConfig === null ||
+        typeof body.customizationConfig !== 'object' ||
+        Array.isArray(body.customizationConfig)
+    ) {
+        return null;
+    }
+
+    if ('commitMessage' in body && typeof body.commitMessage !== 'string') {
+        return null;
+    }
+
+    if ('branch' in body && typeof body.branch !== 'string') {
+        return null;
+    }
+
+    return body as UpdateRequestBody;
+}
+
+export const PATCH = withDeploymentAuth(async (req: NextRequest, { params, user }) => {
+    const deploymentId = params.id;
+
+    let body: UpdateRequestBody;
+    try {
+        const raw = await req.json();
+        const normalized = normalizeUpdateRequestBody(raw);
+
+        if (normalized === null) {
+            return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+        }
+
+        body = normalized;
+    } catch {
+        return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
+
+    try {
+        const { commitRef, deploymentId: resultDeploymentId } =
+            await githubRepositoryUpdateService.updateRepository({
+                deploymentId,
+                userId: user.id,
+                customizationConfig: body.customizationConfig as any,
+                branch: body.branch,
+                commitMessage: body.commitMessage,
+            });
+
+        return NextResponse.json({
+            commitSha: commitRef.commitSha,
+            treeSha: commitRef.treeSha,
+            commitUrl: commitRef.commitUrl,
+            branch: commitRef.branch,
+            fileCount: commitRef.fileCount,
+            owner: commitRef.owner,
+            repo: commitRef.repo,
+            deploymentId: resultDeploymentId,
+        });
+    } catch (err: unknown) {
+        const svcErr = err as { code?: string; message?: string; retryAfterMs?: number };
+
+        if (svcErr.code === 'RATE_LIMITED') {
+            const response = NextResponse.json(
+                { error: svcErr.message ?? 'GitHub API rate limit exceeded' },
+                { status: 429 },
+            );
+            if (svcErr.retryAfterMs) {
+                response.headers.set('Retry-After', String(Math.ceil(svcErr.retryAfterMs / 1000)));
+            }
+            return response;
+        }
+
+        if (svcErr.code === 'NETWORK_ERROR') {
+            return NextResponse.json(
+                { error: svcErr.message ?? 'Network error communicating with GitHub' },
+                { status: 502 },
+            );
+        }
+
+        return NextResponse.json(
+            { error: svcErr.message ?? 'Repository update failed' },
             { status: 500 },
         );
     }
