@@ -15,9 +15,8 @@
  *   1. Validate state cookie (CSRF guard)
  *   2. Exchange code for an access token via GitHub's token endpoint
  *   3. Fetch the authenticated user's GitHub login
- *   4. Persist github_connected, github_username, and the raw token on the
- *      profile row (token storage is intentionally plain-text here; encryption
- *      at rest is delegated to the database layer / a follow-up task)
+ *   4. Encrypt the token with AES-256-GCM and persist github_connected,
+ *      github_username, and github_token_encrypted on the profile row
  *   5. Clear the state cookie and redirect to /app?github=connected
  *
  * Error redirects:
@@ -37,6 +36,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { encryptToken } from '@/lib/github/token-encryption';
 
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const GITHUB_USER_URL = 'https://api.github.com/user';
@@ -131,7 +131,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .update({
             github_connected: true,
             github_username: githubUsername,
-            github_token_encrypted: accessToken,
+            github_token_encrypted: encryptToken(accessToken),
             updated_at: new Date().toISOString(),
         })
         .eq('id', user.id);

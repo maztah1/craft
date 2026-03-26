@@ -18,6 +18,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
+// ── token-encryption mock ─────────────────────────────────────────────────────
+vi.mock('@/lib/github/token-encryption', () => ({
+    encryptToken: (t: string) => `encrypted:${t}`,
+}));
+
 // ── Supabase mock ─────────────────────────────────────────────────────────────
 
 const mockGetUser = vi.fn();
@@ -178,7 +183,7 @@ describe('GET /api/auth/github/callback', () => {
             expect.objectContaining({
                 github_connected: true,
                 github_username: GITHUB_LOGIN,
-                github_token_encrypted: ACCESS_TOKEN,
+                github_token_encrypted: `encrypted:${ACCESS_TOKEN}`,
             }),
         );
         expect(mockEq).toHaveBeenCalledWith('id', 'user-1');
