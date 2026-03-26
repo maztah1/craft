@@ -160,6 +160,31 @@ export class GitHubService {
         }
     }
 
+    /**
+     * Delete a GitHub repository by owner and repo name (Issue #110).
+     * Uses the shared request helper for consistent error handling.
+     * Logs errors but does not throw - best effort cleanup.
+     */
+    async deleteRepository(owner: string, repo: string): Promise<void> {
+        try {
+            const headers = this.buildHeaders();
+            const res = await fetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}`, {
+                method: 'DELETE',
+                headers,
+            });
+            
+            if (!res.ok && res.status !== 404) {
+                const data = await res.json().catch(() => ({}));
+                const message = (data as { message?: string }).message ?? `GitHub API error: ${res.status}`;
+                console.error(`GitHub repo delete failed for ${owner}/${repo}:`, message);
+            }
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Network request failed';
+            console.error(`GitHub repo delete failed for ${owner}/${repo}:`, message);
+            // Continue - DB deletion should succeed regardless
+        }
+    }
+
     // ── Private helpers ─────────────────────────────────────────────────────────
 
     private async tryCreate(

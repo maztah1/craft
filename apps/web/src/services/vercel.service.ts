@@ -228,6 +228,7 @@ export class VercelService {
         };
     }
 
+
     /**
      * Verify that the configured token can reach the Vercel API.
      */
@@ -241,6 +242,23 @@ export class VercelService {
             return false;
         }
     }
+
+    /**
+     * Delete a Vercel project by ID (Issue #110).
+     * Uses the shared request() helper for consistent error handling.
+     * Logs errors but does not throw - best effort cleanup.
+     */
+    async deleteProject(projectId: string): Promise<void> {
+        try {
+            await this.request(`/v10/projects/${projectId}`, {
+                method: 'DELETE',
+            });
+        } catch (error: any) {
+            console.error(`Vercel project delete failed for ${projectId}:`, error.message);
+            // Continue - DB deletion should succeed regardless
+        }
+    }
+
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
