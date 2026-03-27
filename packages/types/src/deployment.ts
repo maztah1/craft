@@ -135,6 +135,7 @@ export interface LogsQueryParams {
     order: 'asc' | 'desc';
     since?: string;
     level?: LogLevel;
+    stage?: string;
 }
 
 export interface DeploymentLogResponse {
