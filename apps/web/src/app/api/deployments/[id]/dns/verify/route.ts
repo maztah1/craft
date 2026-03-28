@@ -27,7 +27,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withDeploymentAuth } from '@/lib/api/with-auth';
+import { withDomainTierCheck } from '@/lib/api/with-auth';
 import { verifyViaTxt, verifyViaCname } from '@/lib/dns/domain-verification';
 
 interface RequestBody {
@@ -46,7 +46,7 @@ function normalizeBody(raw: unknown): RequestBody | null {
     return body as RequestBody;
 }
 
-export const POST = withDeploymentAuth(async (req: NextRequest, { params, supabase }) => {
+export const POST = withDomainTierCheck(async (req: NextRequest, { params, supabase }) => {
     let body: RequestBody;
     try {
         const raw = await req.json();

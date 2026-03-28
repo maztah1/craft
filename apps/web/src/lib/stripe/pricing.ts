@@ -134,6 +134,14 @@ export function getEntitlements(tier: SubscriptionTier): TierEntitlements {
   return TIER_CONFIGS[tier].entitlements;
 }
 
+/**
+ * Returns true if the given tier is allowed to configure custom domains.
+ * Only pro and enterprise tiers have maxCustomDomains > 0.
+ */
+export function canConfigureCustomDomain(tier: SubscriptionTier): boolean {
+  return TIER_CONFIGS[tier].entitlements.maxCustomDomains !== 0;
+}
+
 // ── Startup validation ────────────────────────────────────────────────────────
 
 /**

@@ -20,10 +20,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withDeploymentAuth } from '@/lib/api/with-auth';
+import { withDomainTierCheck } from '@/lib/api/with-auth';
 import { generateDnsConfiguration } from '@/lib/dns/dns-configuration';
 
-export const GET = withDeploymentAuth(async (_req: NextRequest, { params, supabase }) => {
+export const GET = withDomainTierCheck(async (_req: NextRequest, { params, supabase }) => {
     const { data: deployment, error } = await supabase
         .from('deployments')
         .select('custom_domain')

@@ -25,6 +25,10 @@ vi.mock('@/services/vercel.service', () => ({
     },
 }));
 
+vi.mock('@/lib/stripe/pricing', () => ({
+    canConfigureCustomDomain: (tier: string) => tier === 'pro' || tier === 'enterprise',
+}));
+
 const fakeUser = { id: 'user-1' };
 const params = { id: 'dep-1' };
 
@@ -50,6 +54,15 @@ const fullDeployment = {
     vercel_project_id: 'prj_1',
 };
 
+/** Ownership + pro-tier profile queries prepended automatically. */
+function withProTier(extraResults: QueryResult[]) {
+    return makeSupabaseQuery([
+        { data: { user_id: fakeUser.id }, error: null },
+        { data: { subscription_tier: 'pro' }, error: null },
+        ...extraResults,
+    ]);
+}
+
 describe('POST /api/deployments/[id]/https', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -70,26 +83,38 @@ describe('POST /api/deployments/[id]/https', () => {
         expect((await POST(makeRequest('POST'), { params })).status).toBe(403);
     });
 
+    it('returns 403 with upgradeUrl for free-tier users', async () => {
+        mockFrom.mockReturnValue(
+            makeSupabaseQuery([
+                { data: { user_id: fakeUser.id }, error: null },
+                { data: { subscription_tier: 'free' }, error: null },
+            ]),
+        );
+        const { POST } = await import('./route');
+        const res = await POST(makeRequest('POST'), { params });
+        expect(res.status).toBe(403);
+        const body = await res.json();
+        expect(body.upgradeUrl).toBe('/pricing');
+    });
+
     it('returns 404 when no custom_domain configured', async () => {
-        mockFrom
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { user_id: fakeUser.id }, error: null }]))
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { custom_domain: null, vercel_project_id: 'prj_1' }, error: null }]));
+        mockFrom.mockReturnValue(
+            withProTier([{ data: { custom_domain: null, vercel_project_id: 'prj_1' }, error: null }]),
+        );
         const { POST } = await import('./route');
         expect((await POST(makeRequest('POST'), { params })).status).toBe(404);
     });
 
     it('returns 404 when no vercel_project_id configured', async () => {
-        mockFrom
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { user_id: fakeUser.id }, error: null }]))
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { custom_domain: 'example.com', vercel_project_id: null }, error: null }]));
+        mockFrom.mockReturnValue(
+            withProTier([{ data: { custom_domain: 'example.com', vercel_project_id: null }, error: null }]),
+        );
         const { POST } = await import('./route');
         expect((await POST(makeRequest('POST'), { params })).status).toBe(404);
     });
 
     it('returns 409 when domain already added', async () => {
-        mockFrom
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { user_id: fakeUser.id }, error: null }]))
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: fullDeployment, error: null }]));
+        mockFrom.mockReturnValue(withProTier([{ data: fullDeployment, error: null }]));
         const { VercelApiError } = await import('@/services/vercel.service');
         mockAddDomain.mockRejectedValue(new VercelApiError('exists', 'DOMAIN_EXISTS'));
         const { POST } = await import('./route');
@@ -97,9 +122,7 @@ describe('POST /api/deployments/[id]/https', () => {
     });
 
     it('returns 429 with Retry-After when rate limited', async () => {
-        mockFrom
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { user_id: fakeUser.id }, error: null }]))
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: fullDeployment, error: null }]));
+        mockFrom.mockReturnValue(withProTier([{ data: fullDeployment, error: null }]));
         const { VercelApiError } = await import('@/services/vercel.service');
         mockAddDomain.mockRejectedValue(new VercelApiError('rate limited', 'RATE_LIMITED', 30_000));
         const { POST } = await import('./route');
@@ -109,9 +132,7 @@ describe('POST /api/deployments/[id]/https', () => {
     });
 
     it('returns 200 with cert state on success', async () => {
-        mockFrom
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { user_id: fakeUser.id }, error: null }]))
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: fullDeployment, error: null }]));
+        mockFrom.mockReturnValue(withProTier([{ data: fullDeployment, error: null }]));
         mockAddDomain.mockResolvedValue(undefined);
         mockGetCertificate.mockResolvedValue({ domain: 'example.com', state: 'pending' });
         const { POST } = await import('./route');
@@ -130,17 +151,15 @@ describe('GET /api/deployments/[id]/https', () => {
     });
 
     it('returns 404 when no custom domain configured', async () => {
-        mockFrom
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { user_id: fakeUser.id }, error: null }]))
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { custom_domain: null, vercel_project_id: 'prj_1' }, error: null }]));
+        mockFrom.mockReturnValue(
+            withProTier([{ data: { custom_domain: null, vercel_project_id: 'prj_1' }, error: null }]),
+        );
         const { GET } = await import('./route');
         expect((await GET(makeRequest('GET'), { params })).status).toBe(404);
     });
 
     it('returns 200 with active cert state', async () => {
-        mockFrom
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { user_id: fakeUser.id }, error: null }]))
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: fullDeployment, error: null }]));
+        mockFrom.mockReturnValue(withProTier([{ data: fullDeployment, error: null }]));
         mockGetCertificate.mockResolvedValue({
             domain: 'example.com',
             state: 'active',

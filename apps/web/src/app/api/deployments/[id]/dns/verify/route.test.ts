@@ -18,6 +18,10 @@ vi.mock('@/lib/dns/domain-verification', () => ({
     verifyViaCname: mockVerifyViaCname,
 }));
 
+vi.mock('@/lib/stripe/pricing', () => ({
+    canConfigureCustomDomain: (tier: string) => tier === 'pro' || tier === 'enterprise',
+}));
+
 const fakeUser = { id: 'user-1', email: 'user@example.com' };
 const params = { id: 'dep-1' };
 
@@ -39,6 +43,15 @@ function makeSupabaseQuery(results: QueryResult[]) {
             })),
         })),
     };
+}
+
+/** Ownership + pro-tier profile queries prepended automatically. */
+function withProTier(extraResults: QueryResult[]) {
+    return makeSupabaseQuery([
+        { data: { user_id: fakeUser.id }, error: null },
+        { data: { subscription_tier: 'pro' }, error: null },
+        ...extraResults,
+    ]);
 }
 
 describe('POST /api/deployments/[id]/dns/verify', () => {
@@ -63,37 +76,47 @@ describe('POST /api/deployments/[id]/dns/verify', () => {
         expect(res.status).toBe(403);
     });
 
-    it('returns 400 for invalid method value', async () => {
+    it('returns 403 with upgradeUrl for free-tier users', async () => {
         mockFrom.mockReturnValue(
-            makeSupabaseQuery([{ data: { user_id: fakeUser.id }, error: null }]),
+            makeSupabaseQuery([
+                { data: { user_id: fakeUser.id }, error: null },
+                { data: { subscription_tier: 'free' }, error: null },
+            ]),
         );
+        const { POST } = await import('./route');
+        const res = await POST(makeRequest({ method: 'txt', token: 'tok' }), { params });
+        expect(res.status).toBe(403);
+        const body = await res.json();
+        expect(body.upgradeUrl).toBe('/pricing');
+    });
+
+    it('returns 400 for invalid method value', async () => {
+        mockFrom.mockReturnValue(withProTier([]));
         const { POST } = await import('./route');
         const res = await POST(makeRequest({ method: 'invalid' }), { params });
         expect(res.status).toBe(400);
     });
 
     it('returns 400 when method is txt but token is missing', async () => {
-        mockFrom.mockReturnValue(
-            makeSupabaseQuery([{ data: { user_id: fakeUser.id }, error: null }]),
-        );
+        mockFrom.mockReturnValue(withProTier([]));
         const { POST } = await import('./route');
         const res = await POST(makeRequest({ method: 'txt' }), { params });
         expect(res.status).toBe(400);
     });
 
     it('returns 404 when deployment has no custom domain', async () => {
-        mockFrom
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { user_id: fakeUser.id }, error: null }]))
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { custom_domain: null }, error: null }]));
+        mockFrom.mockReturnValue(
+            withProTier([{ data: { custom_domain: null }, error: null }]),
+        );
         const { POST } = await import('./route');
         const res = await POST(makeRequest({ method: 'txt', token: 'tok' }), { params });
         expect(res.status).toBe(404);
     });
 
     it('calls verifyViaTxt and returns result for method=txt', async () => {
-        mockFrom
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { user_id: fakeUser.id }, error: null }]))
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { custom_domain: 'example.com' }, error: null }]));
+        mockFrom.mockReturnValue(
+            withProTier([{ data: { custom_domain: 'example.com' }, error: null }]),
+        );
         mockVerifyViaTxt.mockResolvedValue({ verified: true, method: 'txt', domain: 'example.com' });
 
         const { POST } = await import('./route');
@@ -106,9 +129,9 @@ describe('POST /api/deployments/[id]/dns/verify', () => {
     });
 
     it('calls verifyViaCname and returns result for method=cname', async () => {
-        mockFrom
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { user_id: fakeUser.id }, error: null }]))
-            .mockReturnValueOnce(makeSupabaseQuery([{ data: { custom_domain: 'www.example.com' }, error: null }]));
+        mockFrom.mockReturnValue(
+            withProTier([{ data: { custom_domain: 'www.example.com' }, error: null }]),
+        );
         mockVerifyViaCname.mockResolvedValue({ verified: false, method: 'cname', domain: 'www.example.com', errorCode: 'NOT_FOUND' });
 
         const { POST } = await import('./route');
