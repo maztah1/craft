@@ -834,3 +834,86 @@ describe('VercelService', () => {
         });
     });
 });
+
+describe('VercelService — addDomain', () => {
+    beforeEach(() => vi.stubEnv('VERCEL_TOKEN', MOCK_TOKEN));
+    afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
+
+    it('resolves without error on 200', async () => {
+        const { svc, mockFetch } = makeService();
+        mockFetch.mockResolvedValueOnce(makeResponse(200, {}));
+        await expect(svc.addDomain('prj_1', 'example.com')).resolves.toBeUndefined();
+    });
+
+    it('throws DOMAIN_EXISTS on 409', async () => {
+        const { svc, mockFetch } = makeService();
+        mockFetch.mockResolvedValueOnce(makeResponse(409, { error: { message: 'exists' } }));
+        await expect(svc.addDomain('prj_1', 'example.com')).rejects.toMatchObject({
+            code: 'DOMAIN_EXISTS',
+        });
+    });
+
+    it('throws AUTH_FAILED on 401', async () => {
+        const { svc, mockFetch } = makeService();
+        mockFetch.mockResolvedValueOnce(makeResponse(401, { message: 'Unauthorized' }));
+        await expect(svc.addDomain('prj_1', 'example.com')).rejects.toMatchObject({
+            code: 'AUTH_FAILED',
+        });
+    });
+
+    it('throws RATE_LIMITED on 429 with retryAfterMs', async () => {
+        const { svc, mockFetch } = makeService();
+        mockFetch.mockResolvedValueOnce(
+            makeResponse(429, { message: 'Rate limited' }, { 'Retry-After': '10' }),
+        );
+        await expect(svc.addDomain('prj_1', 'example.com')).rejects.toMatchObject({
+            code: 'RATE_LIMITED',
+            retryAfterMs: 10_000,
+        });
+    });
+
+    it('throws NETWORK_ERROR when fetch throws', async () => {
+        const { svc, mockFetch } = makeService();
+        mockFetch.mockRejectedValueOnce(new Error('socket hang up'));
+        await expect(svc.addDomain('prj_1', 'example.com')).rejects.toMatchObject({
+            code: 'NETWORK_ERROR',
+        });
+    });
+});
+
+describe('VercelService — getCertificate', () => {
+    beforeEach(() => vi.stubEnv('VERCEL_TOKEN', MOCK_TOKEN));
+    afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
+
+    it('returns state:active when expiresAt is present', async () => {
+        const { svc, mockFetch } = makeService();
+        mockFetch.mockResolvedValueOnce(
+            makeResponse(200, { cns: ['example.com'], expiresAt: '2027-01-01T00:00:00Z' }),
+        );
+        const cert = await svc.getCertificate('prj_1', 'example.com');
+        expect(cert).toEqual({ domain: 'example.com', state: 'active', expiresAt: '2027-01-01T00:00:00Z' });
+    });
+
+    it('returns state:pending when no expiresAt', async () => {
+        const { svc, mockFetch } = makeService();
+        mockFetch.mockResolvedValueOnce(makeResponse(200, {}));
+        const cert = await svc.getCertificate('prj_1', 'example.com');
+        expect(cert).toEqual({ domain: 'example.com', state: 'pending' });
+    });
+
+    it('returns state:pending on 404 (cert not yet issued)', async () => {
+        const { svc, mockFetch } = makeService();
+        mockFetch.mockResolvedValueOnce(makeResponse(404, { message: 'Not found' }));
+        const cert = await svc.getCertificate('prj_1', 'example.com');
+        expect(cert).toEqual({ domain: 'example.com', state: 'pending' });
+    });
+
+    it('returns state:error when response contains error field', async () => {
+        const { svc, mockFetch } = makeService();
+        mockFetch.mockResolvedValueOnce(
+            makeResponse(200, { error: { message: 'DNS not propagated' } }),
+        );
+        const cert = await svc.getCertificate('prj_1', 'example.com');
+        expect(cert).toEqual({ domain: 'example.com', state: 'error', error: 'DNS not propagated' });
+    });
+});

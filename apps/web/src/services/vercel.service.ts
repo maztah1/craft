@@ -35,10 +35,26 @@ export type VercelErrorCode =
     | 'RATE_LIMITED'
     | 'NETWORK_ERROR'
     | 'PROJECT_EXISTS'
-    | 'DOMAIN_ALREADY_EXISTS'
-    | 'DOMAIN_NOT_FOUND'
-    | 'DOMAIN_VERIFICATION_REQUIRED'
+    | 'DOMAIN_EXISTS'
     | 'UNKNOWN';
+
+// ── Domain / certificate types ────────────────────────────────────────────────
+
+export type CertificateState =
+    | 'pending'      // Vercel is provisioning the certificate
+    | 'active'       // Certificate is live
+    | 'error';       // Provisioning failed (e.g. DNS not yet propagated)
+
+export interface DomainCertificate {
+    /** The custom domain. */
+    domain: string;
+    /** Current certificate state. */
+    state: CertificateState;
+    /** ISO 8601 expiry date — present when state is "active". */
+    expiresAt?: string;
+    /** Human-readable reason — present when state is "error". */
+    error?: string;
+}
 
 export class VercelApiError extends Error {
     constructor(
@@ -356,6 +372,65 @@ export class VercelService {
         } catch {
             return false;
         }
+    }
+
+    /**
+     * Add a custom domain to a Vercel project and trigger SSL provisioning.
+     *
+     * Vercel automatically begins certificate provisioning once the domain is
+     * added. The caller should poll `getCertificate` to track progress.
+     *
+     * Throws DOMAIN_EXISTS (409) if the domain is already attached.
+     */
+    async addDomain(projectId: string, domain: string): Promise<void> {
+        await this.request(`/v10/projects/${projectId}/domains`, {
+            method: 'POST',
+            body: JSON.stringify({ name: domain }),
+        }, {
+            status: 409,
+            code: 'DOMAIN_EXISTS',
+            message: `Domain "${domain}" is already added to project ${projectId}`,
+        });
+    }
+
+    /**
+     * Retrieve the SSL certificate state for a domain on a Vercel project.
+     *
+     * Maps Vercel's `certs` API response to a simplified `DomainCertificate`.
+     * Returns `state: "pending"` when no certificate record exists yet.
+     */
+    async getCertificate(projectId: string, domain: string): Promise<DomainCertificate> {
+        type CertResponse = {
+            cns?: string[];
+            expiresAt?: string;
+            createdAt?: number;
+            error?: { message: string };
+        };
+
+        let data: CertResponse;
+        try {
+            data = await this.request<CertResponse>(
+                `/v7/projects/${projectId}/domains/${domain}/cert`,
+                { method: 'GET' },
+            );
+        } catch (err: unknown) {
+            const vercelErr = err as VercelApiError;
+            // 404 means Vercel hasn't issued a cert yet — treat as pending
+            if (vercelErr.code === 'UNKNOWN' && vercelErr.message.includes('404')) {
+                return { domain, state: 'pending' };
+            }
+            throw err;
+        }
+
+        if (data.error) {
+            return { domain, state: 'error', error: data.error.message };
+        }
+
+        if (data.expiresAt) {
+            return { domain, state: 'active', expiresAt: data.expiresAt };
+        }
+
+        return { domain, state: 'pending' };
     }
 
     /**
