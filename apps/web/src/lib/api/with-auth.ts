@@ -8,6 +8,8 @@ import type { SubscriptionTier } from '@craft/types';
 export type AuthedRouteContext = {
     user: User;
     supabase: SupabaseClient;
+    correlationId: string;
+    log: Logger;
 };
 
 type RouteHandler<TParams = {}> = (
@@ -18,17 +20,24 @@ type RouteHandler<TParams = {}> = (
 /**
  * Wraps a route handler with Supabase session authentication.
  * Returns 401 if the user is not authenticated.
+ * Attaches a correlation ID and logger to the context.
  */
 export function withAuth<TParams = {}>(handler: RouteHandler<TParams>) {
     return async (req: NextRequest, { params }: { params: TParams }) => {
+        const correlationId = resolveCorrelationId(req);
+        const log = createLogger({ correlationId });
         const supabase = createClient();
         const { data: { user }, error } = await supabase.auth.getUser();
 
         if (error || !user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            const res = NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            res.headers.set(CORRELATION_ID_HEADER, correlationId);
+            return res;
         }
 
-        return handler(req, { user, supabase, params });
+        const response = await handler(req, { user, supabase, correlationId, log, params });
+        response.headers.set(CORRELATION_ID_HEADER, correlationId);
+        return response;
     };
 }
 
