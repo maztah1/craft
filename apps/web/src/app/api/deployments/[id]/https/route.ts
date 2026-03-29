@@ -29,6 +29,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withDomainTierCheck } from '@/lib/api/with-auth';
 import { VercelService, VercelApiError } from '@/services/vercel.service';
+import { requireDomainTier } from '@/lib/api/require-domain-tier';
 
 const vercel = new VercelService();
 

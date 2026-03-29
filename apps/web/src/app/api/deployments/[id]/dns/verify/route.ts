@@ -29,6 +29,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withDomainTierCheck } from '@/lib/api/with-auth';
 import { verifyViaTxt, verifyViaCname } from '@/lib/dns/domain-verification';
+import { requireDomainTier } from '@/lib/api/require-domain-tier';
 
 interface RequestBody {
     method: 'txt' | 'cname';
