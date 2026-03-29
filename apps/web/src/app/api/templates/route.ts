@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { templateService } from '@/services/template.service';
+import { handlePreflight } from '@/lib/api/cors';
 import type { TemplateFilters } from '@craft/types';
+
+export function OPTIONS(req: NextRequest) {
+    return handlePreflight(req);
+}
 
 export async function GET(req: NextRequest) {
     try {
